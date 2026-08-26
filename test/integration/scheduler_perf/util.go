@@ -54,6 +54,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller/resourceclaim"
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/scheduler"
+	schedmetrics "k8s.io/kubernetes/pkg/scheduler/metrics"
 	"k8s.io/kubernetes/pkg/scheduler/apis/config"
 	kubeschedulerscheme "k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
 	schedutil "k8s.io/kubernetes/pkg/scheduler/util"
@@ -92,7 +93,7 @@ func newDefaultComponentConfig() (*config.KubeSchedulerConfiguration, error) {
 // remove resources after finished.
 // Notes on rate limiter:
 //   - client rate limit is set to 5000.
-func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfiguration, enabledFeatures map[featuregate.Feature]bool, opts *schedulerPerfOptions) (*scheduler.Scheduler, informers.SharedInformerFactory, <-chan struct{}, ktesting.TContext) {
+func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfiguration, enabledFeatures map[featuregate.Feature]bool, qps *float32, burst *int, opts *schedulerPerfOptions) (*scheduler.Scheduler, informers.SharedInformerFactory, <-chan struct{}, ktesting.TContext) {
 	var runtimeConfig []string
 	if enabledFeatures[features.DynamicResourceAllocation] {
 		runtimeConfig = append(runtimeConfig, fmt.Sprintf("%s=true", resourceapi.SchemeGroupVersion))
@@ -123,11 +124,23 @@ func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfig
 		tCtx.Cancel("test is done")
 	})
 
-	// TODO: client connection configuration, such as QPS or Burst is configurable in theory, this could be derived from the `config`, need to
-	// support this when there is any testcase that depends on such configuration.
-	cfg := restclient.CopyConfig(server.ClientConfig)
-	cfg.QPS = 5000.0
-	cfg.Burst = 5000
+	// 1. Testing framework client configuration (default/static limits)
+	testingFrameworkCfg := restclient.CopyConfig(server.ClientConfig)
+	testingFrameworkCfg.QPS = 5000.0
+	testingFrameworkCfg.Burst = 5000
+	frameworkTCtx := tCtx.WithRESTConfig(testingFrameworkCfg)
+
+	// 2. Scheduler client configuration (custom limits)
+	schedulerCfg := restclient.CopyConfig(server.ClientConfig)
+	schedulerCfg.QPS = 5000.0
+	schedulerCfg.Burst = 5000
+	if qps != nil {
+		schedulerCfg.QPS = *qps
+	}
+	if burst != nil {
+		schedulerCfg.Burst = *burst
+	}
+	schedulerTCtx := tCtx.WithRESTConfig(schedulerCfg)
 
 	// use default component config if config here is nil
 	if config == nil {
@@ -138,14 +151,12 @@ func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfig
 		}
 	}
 
-	tCtx = tCtx.WithRESTConfig(cfg)
-
 	// Not all config options will be effective but only those mostly related with scheduler performance will
 	// be applied to start a scheduler, most of them are defined in `scheduler.schedulerOptions`.
-	scheduler, informerFactory, done := util.StartSchedulerWithDone(tCtx, config, opts.outOfTreePluginRegistry)
-	util.StartFakePVController(tCtx, tCtx.Client(), informerFactory)
-	runGC := util.CreateGCController(tCtx, tCtx, *cfg, informerFactory)
-	runNS := util.CreateNamespaceController(tCtx, tCtx, *cfg, informerFactory)
+	scheduler, informerFactory, done := util.StartSchedulerWithDone(schedulerTCtx, config, opts.outOfTreePluginRegistry)
+	util.StartFakePVController(frameworkTCtx, frameworkTCtx.Client(), informerFactory)
+	runGC := util.CreateGCController(frameworkTCtx, frameworkTCtx, *testingFrameworkCfg, informerFactory)
+	runNS := util.CreateNamespaceController(frameworkTCtx, frameworkTCtx, *testingFrameworkCfg, informerFactory)
 	runResourceClaimController := func() {}
 	if enabledFeatures[features.DynamicResourceAllocation] {
 		// Testing of DRA with inline resource claims depends on this
@@ -155,16 +166,16 @@ func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfig
 			PrioritizedList:        true,
 			WorkloadResourceClaims: enabledFeatures[features.DRAWorkloadResourceClaims],
 		}
-		runResourceClaimController = util.CreateResourceClaimController(tCtx, tCtx, tCtx.Client(), informerFactory, features)
+		runResourceClaimController = util.CreateResourceClaimController(frameworkTCtx, frameworkTCtx, frameworkTCtx.Client(), informerFactory, features)
 	}
 
-	informerFactory.Start(tCtx.Done())
-	informerFactory.WaitForCacheSync(tCtx.Done())
+	informerFactory.Start(frameworkTCtx.Done())
+	informerFactory.WaitForCacheSync(frameworkTCtx.Done())
 	go runGC()
 	go runNS()
 	go runResourceClaimController()
 
-	return scheduler, informerFactory, done, tCtx
+	return scheduler, informerFactory, done, frameworkTCtx
 }
 
 func isAttempted(pod *v1.Pod) bool {
@@ -824,3 +835,212 @@ func (sdc *schedulingDurationCollector) collect() []DataItem {
 		Unit: "s",
 	}}
 }
+
+type pendingAPICallsCollector struct {
+	resultLabels map[string]string
+	interval     time.Duration
+	samples      map[string][]float64
+	mu           sync.RWMutex
+}
+
+func newPendingAPICallsCollector(resultLabels map[string]string, interval time.Duration) *pendingAPICallsCollector {
+	return &pendingAPICallsCollector{
+		resultLabels: resultLabels,
+		interval:     interval,
+		samples:      make(map[string][]float64),
+	}
+}
+
+func (pc *pendingAPICallsCollector) init() error {
+	pc.collectSample()
+	return nil
+}
+
+func (pc *pendingAPICallsCollector) run(tCtx ktesting.TContext) {
+	ticker := time.NewTicker(pc.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-tCtx.Done():
+			return
+		case <-ticker.C:
+			pc.collectSample()
+		}
+	}
+}
+
+func (pc *pendingAPICallsCollector) collectSample() {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+
+	for _, callType := range []string{"pod_binding", "pod_status_patch"} {
+		v, err := testutil.GetGaugeMetricValue(schedmetrics.AsyncAPIPendingCalls.WithLabelValues(callType))
+		if err == nil {
+			pc.samples[callType] = append(pc.samples[callType], v)
+		}
+	}
+}
+
+func (pc *pendingAPICallsCollector) collect() []DataItem {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+
+	var dataItems []DataItem
+	for callType, values := range pc.samples {
+		if len(values) == 0 {
+			continue
+		}
+		sort.Float64s(values)
+		sum := 0.0
+		for _, v := range values {
+			sum += v
+		}
+
+		labels := maps.Clone(pc.resultLabels)
+		labels["Metric"] = "scheduler_pending_async_api_calls"
+		labels["call_type"] = callType
+
+		dataItems = append(dataItems, DataItem{
+			Labels: labels,
+			Data: map[string]float64{
+				"Perc50":  values[int(math.Ceil(float64(len(values)*50)/100))-1],
+				"Perc90":  values[int(math.Ceil(float64(len(values)*90)/100))-1],
+				"Perc95":  values[int(math.Ceil(float64(len(values)*95)/100))-1],
+				"Perc99":  values[int(math.Ceil(float64(len(values)*99)/100))-1],
+				"Average": sum / float64(len(values)),
+				"Max":     values[len(values)-1],
+			},
+			Unit: "calls",
+		})
+	}
+	return dataItems
+}
+
+type counterCollector struct {
+	resultLabels map[string]string
+}
+
+func newCounterCollector(resultLabels map[string]string) *counterCollector {
+	return &counterCollector{resultLabels: resultLabels}
+}
+
+func (cc *counterCollector) init() error { return nil }
+func (cc *counterCollector) run(tCtx ktesting.TContext)   {}
+func (cc *counterCollector) collect() []DataItem {
+	var items []DataItem
+	for _, callType := range []string{"pod_status_patch", "pod_binding"} {
+		vals, _ := testutil.GetCounterValuesFromGatherer(legacyregistry.DefaultGatherer, "scheduler_async_api_call_execution_total", map[string]string{"call_type": callType}, "result")
+		for res, count := range vals {
+			lbls := maps.Clone(cc.resultLabels)
+			lbls["Metric"] = "scheduler_async_api_call_execution_total"
+			lbls["call_type"] = callType
+			lbls["result"] = res
+			items = append(items, DataItem{
+				Labels: lbls,
+				Data:   map[string]float64{"Count": count},
+				Unit:   "count",
+			})
+		}
+	}
+	attempts, _ := testutil.GetCounterValuesFromGatherer(legacyregistry.DefaultGatherer, "scheduler_schedule_attempts_total", nil, "result")
+	for res, count := range attempts {
+		lbls := maps.Clone(cc.resultLabels)
+		lbls["Metric"] = "scheduler_schedule_attempts_total"
+		lbls["result"] = res
+		items = append(items, DataItem{
+			Labels: lbls,
+			Data:   map[string]float64{"Count": count},
+			Unit:   "count",
+		})
+	}
+	return items
+}
+
+type victimSLICollector struct {
+	podInformer   coreinformers.PodInformer
+	resultLabels  map[string]string
+	labelSelector map[string]string
+	namespaces    sets.Set[string]
+	samples       []float64
+	mu            sync.Mutex
+}
+
+func newVictimSLICollector(podInformer coreinformers.PodInformer, resultLabels map[string]string, labelSelector map[string]string, namespaces []string) *victimSLICollector {
+	return &victimSLICollector{
+		podInformer:   podInformer,
+		resultLabels:  resultLabels,
+		labelSelector: labelSelector,
+		namespaces:    sets.New(namespaces...),
+	}
+}
+
+func (vc *victimSLICollector) init() error { return nil }
+
+func (vc *victimSLICollector) run(tCtx ktesting.TContext) {
+	handle, err := vc.podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj any) {
+			vc.onPodChange(tCtx, nil, obj)
+		},
+		UpdateFunc: func(oldObj, newObj any) {
+			vc.onPodChange(tCtx, oldObj, newObj)
+		},
+	})
+	if err != nil {
+		tCtx.Fatalf("register pod event handler: %v", err)
+	}
+	defer func() {
+		_ = vc.podInformer.Informer().RemoveEventHandler(handle)
+	}()
+	<-tCtx.Done()
+}
+
+func (vc *victimSLICollector) onPodChange(tCtx ktesting.TContext, oldObj, newObj any) {
+	oldPod, newPod, err := schedutil.As[*v1.Pod](oldObj, newObj)
+	if err != nil || newPod == nil {
+		return
+	}
+	if len(vc.namespaces) > 0 && !vc.namespaces.Has(newPod.Namespace) {
+		return
+	}
+	if !labelsMatch(newPod.Labels, vc.labelSelector) {
+		return
+	}
+	if (oldPod == nil || oldPod.Spec.NodeName == "") && newPod.Spec.NodeName != "" {
+		now := time.Now()
+		durationMs := now.Sub(newPod.CreationTimestamp.Time).Seconds() * 1000.0
+		vc.mu.Lock()
+		vc.samples = append(vc.samples, durationMs)
+		vc.mu.Unlock()
+	}
+}
+
+func (vc *victimSLICollector) collect() []DataItem {
+	vc.mu.Lock()
+	defer vc.mu.Unlock()
+	if len(vc.samples) == 0 {
+		return nil
+	}
+	sort.Float64s(vc.samples)
+	sum := 0.0
+	for _, v := range vc.samples {
+		sum += v
+	}
+	n := float64(len(vc.samples))
+	labels := maps.Clone(vc.resultLabels)
+	labels["Metric"] = "victim_pod_scheduling_sli_duration"
+	return []DataItem{{
+		Labels: labels,
+		Data: map[string]float64{
+			"Average": sum / n,
+			"Perc50":  vc.samples[int(math.Ceil(n*0.50))-1],
+			"Perc90":  vc.samples[int(math.Ceil(n*0.90))-1],
+			"Perc95":  vc.samples[int(math.Ceil(n*0.95))-1],
+			"Perc99":  vc.samples[int(math.Ceil(n*0.99))-1],
+		},
+		Unit: "ms",
+	}}
+}
+
+
+

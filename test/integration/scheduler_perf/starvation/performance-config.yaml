@@ -1,4 +1,6 @@
 - name: StarvationIndependent
+  featureGates:
+    SchedulerAsyncAPICalls: true
   metricsCollectorConfig:
     metrics:
       scheduler_queue_incoming_pods_total:
@@ -8,19 +10,28 @@
         values: [active, backoff, unschedulable]
       scheduler_scheduling_attempt_duration_seconds:
       - label: result
-        values: [scheduled, unschedulable, error]
+        values: [scheduled, unschedulable]
+      scheduler_async_api_call_execution_duration_seconds:
+      - label: call_type
+        values: [pod_binding, pod_status_patch]
+      scheduler_pod_scheduling_sli_duration_seconds:
+      - label: attempts
+        values: ["1"]
+      scheduler_framework_extension_point_duration_seconds:
+      - label: extension_point
+        values: [Bind]
   workloadTemplate:
   - opcode: createNodes
     countParam: $initNodes
     nodeTemplatePath: templates/node.yaml
   - opcode: createNamespaces
     prefix: starvation
-    count: 1
+    count: 2
   # Start churn generator to continuously generate PodAdd/PodDelete events
   - opcode: churn
     mode: recreate
     number: 600
-    intervalMilliseconds: 1000
+    intervalMilliseconds: 50
     namespace: starvation-0
     templatePaths:
     - templates/churn-pod.yaml
@@ -36,12 +47,12 @@
   # Start metrics collection specifically for the victim pods
   - opcode: startCollectingMetrics
     name: victim
-    namespaces: [starvation-0]
+    namespaces: [starvation-1]
   # Create victim pods and wait for them to schedule
   - opcode: createPods
     countParam: $starvationProne
     podTemplatePath: templates/victim-pod.yaml
-    namespace: starvation-0
+    namespace: starvation-1
   - opcode: stopCollectingMetrics
   workloads:
   - name: 10Nodes_100Cloggers
@@ -50,6 +61,24 @@
       initNodes: 10
       cloggerPods: 100
       starvationProne: 50
+  - name: 1000Nodes_1000Cloggers_QPS100
+    schedulerApiClientQPS: 100
+    schedulerApiClientBurst: 100
+    labels: [performance]
+    params:
+      initNodes: 1000
+      cloggerPods: 1000
+      starvationProne: 200
+  - name: 1000Nodes_1000Cloggers_QPS100_AsyncDisabled
+    featureGates:
+      SchedulerAsyncAPICalls: false
+    schedulerApiClientQPS: 100
+    schedulerApiClientBurst: 100
+    labels: [performance]
+    params:
+      initNodes: 1000
+      cloggerPods: 1000
+      starvationProne: 200
   - name: 10000Nodes_10000Cloggers
     labels: [performance]
     params:

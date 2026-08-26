@@ -3,7 +3,7 @@ kind: Pod
 metadata:
   generateName: pod-victim-
 spec:
-  priority: 0
+  priority: 10000
   containers:
   - image: registry.k8s.io/pause:3.10.1
     name: pause

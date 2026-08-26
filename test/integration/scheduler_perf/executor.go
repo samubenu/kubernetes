@@ -644,8 +644,11 @@ var getTestDataCollectors = func(podInformer coreinformers.PodInformer, name str
 	}
 	return []testDataCollector{
 		newThroughputCollector(podInformer, map[string]string{"Name": name}, labelSelector, namespaces, throughputErrorMargin),
+		newVictimSLICollector(podInformer, map[string]string{"Name": name}, labelSelector, namespaces),
 		newMetricsCollector(mcc, map[string]string{"Name": name}),
 		newMemoryCollector(map[string]string{"Name": name}, 500*time.Millisecond),
+		newPendingAPICallsCollector(map[string]string{"Name": name}, 50*time.Millisecond),
+		newCounterCollector(map[string]string{"Name": name}),
 		newSchedulingDurationCollector(map[string]string{"Name": name}),
 	}
 }

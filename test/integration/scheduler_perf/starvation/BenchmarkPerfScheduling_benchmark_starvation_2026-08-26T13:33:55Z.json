@@ -1,0 +1,617 @@
+{
+  "version": "v1",
+  "dataItems": [
+    {
+      "data": {
+        "Average": 71.49857192706715,
+        "Perc50": 50.00479731023955,
+        "Perc90": 92.99234654389474,
+        "Perc95": 92.99234654389474,
+        "Perc99": 92.99234654389474
+      },
+      "unit": "pods/s",
+      "labels": {
+        "Metric": "SchedulingThroughput",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 41826.62039597001,
+        "Perc50": 41811.059582,
+        "Perc90": 42681.516595,
+        "Perc95": 42792.487035,
+        "Perc99": 42882.116694
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "victim_pod_scheduling_sli_duration",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 34366.2027833884,
+        "Perc50": 204.8,
+        "Perc90": 204.8,
+        "Perc95": 204.8,
+        "Perc99": 204.8
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_framework_extension_point_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "Bind",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 33046.617544414694,
+        "Perc50": 39641.98019801981,
+        "Perc90": 73355.63636363637,
+        "Perc95": 77637.81818181818,
+        "Perc99": 81063.56363636363
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_pod_scheduling_sli_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "1",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 32971.381320963206,
+        "Perc50": 16384,
+        "Perc90": 16384,
+        "Perc95": 16384,
+        "Perc99": 16384
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_scheduling_attempt_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "scheduled"
+      }
+    },
+    {
+      "data": {
+        "Average": 2.659221569488703,
+        "Perc50": 2.2131401393651147,
+        "Perc90": 4.242719881744278,
+        "Perc95": 7.258093126385807,
+        "Perc99": 14.208901098901082
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_scheduling_attempt_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "unschedulable"
+      }
+    },
+    {
+      "data": {
+        "Average": 34424.327050599386,
+        "Perc50": 16384,
+        "Perc90": 16384,
+        "Perc95": 16384,
+        "Perc99": 16384
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_async_api_call_execution_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_binding",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 21005.09334507062,
+        "Perc50": 16384,
+        "Perc90": 16384,
+        "Perc95": 16384,
+        "Perc99": 16384
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_async_api_call_execution_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_status_patch",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 353.35704022988506,
+        "Max": 413.3125,
+        "Perc50": 359.5703125,
+        "Perc90": 398.15625,
+        "Perc95": 402.5703125,
+        "Perc99": 413.3125
+      },
+      "unit": "MB",
+      "labels": {
+        "Metric": "heap_memory_usage",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "GrowthRate": 78.05064019035856
+      },
+      "unit": "MB/min",
+      "labels": {
+        "Metric": "memory_growth_rate",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 0,
+        "Max": 0,
+        "Perc50": 0,
+        "Perc90": 0,
+        "Perc95": 0,
+        "Perc99": 0
+      },
+      "unit": "calls",
+      "labels": {
+        "Metric": "scheduler_pending_async_api_calls",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_binding",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 0.001160092807424594,
+        "Max": 1,
+        "Perc50": 0,
+        "Perc90": 0,
+        "Perc95": 0,
+        "Perc99": 0
+      },
+      "unit": "calls",
+      "labels": {
+        "Metric": "scheduler_pending_async_api_calls",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_status_patch",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Count": 2167
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_async_api_call_execution_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_status_patch",
+        "extension_point": "not applicable",
+        "result": "success"
+      }
+    },
+    {
+      "data": {
+        "Count": 361
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_async_api_call_execution_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_binding",
+        "extension_point": "not applicable",
+        "result": "error"
+      }
+    },
+    {
+      "data": {
+        "Count": 299
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_async_api_call_execution_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_binding",
+        "extension_point": "not applicable",
+        "result": "success"
+      }
+    },
+    {
+      "data": {
+        "Count": 362
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_schedule_attempts_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "error"
+      }
+    },
+    {
+      "data": {
+        "Count": 299
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_schedule_attempts_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "scheduled"
+      }
+    },
+    {
+      "data": {
+        "Count": 20412
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_schedule_attempts_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "unschedulable"
+      }
+    },
+    {
+      "data": {
+        "Duration": 43.084032623
+      },
+      "unit": "s",
+      "labels": {
+        "Metric": "SchedulingDuration",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 57.49171309861765,
+        "Perc50": 26.002782245694725,
+        "Perc90": 88.98064395154057,
+        "Perc95": 88.98064395154057,
+        "Perc99": 88.98064395154057
+      },
+      "unit": "pods/s",
+      "labels": {
+        "Metric": "SchedulingThroughput",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 2071.6604479899997,
+        "Perc50": 2061.3356559999997,
+        "Perc90": 2952.209399,
+        "Perc95": 3061.510078,
+        "Perc99": 3152.004157
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "victim_pod_scheduling_sli_duration",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 26284.612453750007,
+        "Perc50": 16384,
+        "Perc90": 16384,
+        "Perc95": 16384,
+        "Perc99": 16384
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_async_api_call_execution_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_binding",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 17924.109401571845,
+        "Perc50": 16384,
+        "Perc90": 16384,
+        "Perc95": 16384,
+        "Perc99": 16384
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_async_api_call_execution_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_status_patch",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 5583.789770837594,
+        "Perc50": 49.78650306748467,
+        "Perc90": 204.8,
+        "Perc95": 204.8,
+        "Perc99": 204.8
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_framework_extension_point_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "Bind",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 424.2306665564784,
+        "Perc50": 58.54748603351956,
+        "Perc90": 1713.2307692307702,
+        "Perc95": 2136.6153846153843,
+        "Perc99": 2475.323076923077
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_pod_scheduling_sli_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "1",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 363.09586004152817,
+        "Perc50": 28.03305785123967,
+        "Perc90": 1449.5067961165055,
+        "Perc95": 1748.7533980582523,
+        "Perc99": 1988.1506796116505
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_scheduling_attempt_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "scheduled"
+      }
+    },
+    {
+      "data": {
+        "Average": 2.6427419548286615,
+        "Perc50": 2.6506024096385543,
+        "Perc90": 3.8881927710843374,
+        "Perc95": 5.186666666666664,
+        "Perc99": 13.234285714285761
+      },
+      "unit": "ms",
+      "labels": {
+        "Metric": "scheduler_scheduling_attempt_duration_seconds",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "unschedulable"
+      }
+    },
+    {
+      "data": {
+        "Average": 250.88616071428572,
+        "Max": 277.4375,
+        "Perc50": 246.890625,
+        "Perc90": 277.4375,
+        "Perc95": 277.4375,
+        "Perc99": 277.4375
+      },
+      "unit": "MB",
+      "labels": {
+        "Metric": "heap_memory_usage",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "GrowthRate": 1117.2954027280114
+      },
+      "unit": "MB/min",
+      "labels": {
+        "Metric": "memory_growth_rate",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 0,
+        "Max": 0,
+        "Perc50": 0,
+        "Perc90": 0,
+        "Perc95": 0,
+        "Perc99": 0
+      },
+      "unit": "calls",
+      "labels": {
+        "Metric": "scheduler_pending_async_api_calls",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_binding",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Average": 1162,
+        "Max": 1162,
+        "Perc50": 1162,
+        "Perc90": 1162,
+        "Perc95": 1162,
+        "Perc99": 1162
+      },
+      "unit": "calls",
+      "labels": {
+        "Metric": "scheduler_pending_async_api_calls",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_status_patch",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    },
+    {
+      "data": {
+        "Count": 1294
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_async_api_call_execution_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_status_patch",
+        "extension_point": "not applicable",
+        "result": "success"
+      }
+    },
+    {
+      "data": {
+        "Count": 212
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_async_api_call_execution_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "pod_binding",
+        "extension_point": "not applicable",
+        "result": "success"
+      }
+    },
+    {
+      "data": {
+        "Count": 228
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_schedule_attempts_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "error"
+      }
+    },
+    {
+      "data": {
+        "Count": 602
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_schedule_attempts_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "scheduled"
+      }
+    },
+    {
+      "data": {
+        "Count": 642
+      },
+      "unit": "count",
+      "labels": {
+        "Metric": "scheduler_schedule_attempts_total",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "unschedulable"
+      }
+    },
+    {
+      "data": {
+        "Duration": 3.087878044
+      },
+      "unit": "s",
+      "labels": {
+        "Metric": "SchedulingDuration",
+        "Name": "BenchmarkPerfScheduling/StarvationIndependent/1000Nodes_1000Cloggers_QPS100_AsyncDisabled/victim",
+        "attempts": "not applicable",
+        "call_type": "not applicable",
+        "extension_point": "not applicable",
+        "result": "not applicable"
+      }
+    }
+  ]
+}

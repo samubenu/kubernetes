@@ -3,7 +3,7 @@ kind: Pod
 metadata:
   generateName: pod-clogger-
 spec:
-  priority: 1000
+  priority: 100
   affinity:
     podAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
