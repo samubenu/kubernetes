@@ -24,6 +24,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	fwk "k8s.io/kube-scheduler/framework"
 	"k8s.io/kubernetes/pkg/scheduler/backend/heap"
@@ -263,10 +264,9 @@ type activeQueue struct {
 	// It is non-nil only when SchedulerPopFromBackoffQ feature is enabled.
 	backoffQPopper backoffQPopper
 
-	// lastPoppedEntityKey is the latest entity that was popped from the activeQ.
-	// It's used to check if the scheduling cycle is pending for a PodGroup matching the newly added pod.
-	// It should be cleared when the entity is re-added to the scheduling queue.
-	lastPoppedEntityKey string
+	// poppedEntities tracks the keys of entities that have been popped from the activeQ
+	// and have not yet finished their scheduling attempt (or been re-added to the scheduling queue).
+	poppedEntities sets.Set[string]
 }
 
 func newActiveQueue(queue *heap.Heap[framework.QueuedEntityInfo], metricRecorder *metrics.MetricAsyncRecorder, backoffQPopper backoffQPopper) *activeQueue {
@@ -276,6 +276,7 @@ func newActiveQueue(queue *heap.Heap[framework.QueuedEntityInfo], metricRecorder
 		inFlightEvents:  list.New(),
 		metricsRecorder: metricRecorder,
 		backoffQPopper:  backoffQPopper,
+		poppedEntities:  sets.New[string](),
 	}
 	aq.cond.L = &aq.lock
 	aq.unlockedQueue = newUnlockedActiveQueue(queue, aq.inFlightPods, aq.inFlightEvents, metricRecorder)
@@ -405,28 +406,26 @@ func (aq *activeQueue) unlockedPop(logger klog.Logger) (framework.QueuedEntityIn
 		// Just ignore/discard this duplicated entity and try to pop the next one.
 		return aq.unlockedPop(logger)
 	}
-	aq.lastPoppedEntityKey = queuedEntityKeyFunc(entity)
+	aq.poppedEntities.Insert(queuedEntityKeyFunc(entity))
 
 	return entity, nil
 }
 
-// isLastPoppedEntity checks if the last popped entity is the given entity.
+// isLastPoppedEntity checks if the given entity is currently popped from the activeQ.
 func (aq *activeQueue) isLastPoppedEntity(entityLookup framework.QueuedEntityInfo) bool {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
-	return aq.lastPoppedEntityKey == queuedEntityKeyFunc(entityLookup)
+	return aq.poppedEntities.Has(queuedEntityKeyFunc(entityLookup))
 }
 
-// clearPoppedEntity clears the last popped entity if it matches the given entity.
+// clearPoppedEntity removes the given entity from the set of popped entities.
 func (aq *activeQueue) clearPoppedEntity(entity framework.QueuedEntityInfo) {
 	if entity == nil {
 		return
 	}
 	aq.lock.Lock()
 	defer aq.lock.Unlock()
-	if aq.lastPoppedEntityKey == queuedEntityKeyFunc(entity) {
-		aq.lastPoppedEntityKey = ""
-	}
+	aq.poppedEntities.Delete(queuedEntityKeyFunc(entity))
 }
 
 // list returns all pods that are in the queue.
@@ -624,6 +623,7 @@ func (aq *activeQueue) unlockedDone(podUID types.UID) {
 		return
 	}
 	delete(aq.inFlightPods, podUID)
+	aq.poppedEntities.Delete(queuedEntityKeyFunc(newQueuedPodInfoForLookup(inFlightEntity.pod)))
 	aq.unlockedRemoveEventsMarker(inFlightEntity)
 }
 

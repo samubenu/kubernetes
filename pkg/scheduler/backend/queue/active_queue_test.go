@@ -257,23 +257,24 @@ func TestClearPoppedEntity(t *testing.T) {
 	pInfo2 := &framework.QueuedPodInfo{PodInfo: &framework.PodInfo{Pod: st.MakePod().Namespace("ns").Name("p2").UID("p2").Obj()}}
 
 	tests := []struct {
-		name                    string
-		entityToClear           framework.QueuedEntityInfo
-		wantLastPoppedEntityKey string
+		name          string
+		entityToClear framework.QueuedEntityInfo
+		wantPopped    bool
 	}{
 		{
-			name:                    "clearing an unrelated entity does not clear last popped entity",
-			entityToClear:           pInfo2,
-			wantLastPoppedEntityKey: queuedEntityKeyFunc(pInfo1),
+			name:          "clearing an unrelated entity does not clear popped entity",
+			entityToClear: pInfo2,
+			wantPopped:    true,
 		},
 		{
-			name:                    "clearing nil entity does not clear last popped entity",
-			entityToClear:           nil,
-			wantLastPoppedEntityKey: queuedEntityKeyFunc(pInfo1),
+			name:          "clearing nil entity does not clear popped entity",
+			entityToClear: nil,
+			wantPopped:    true,
 		},
 		{
-			name:          "clearing the matching entity clears last popped entity",
+			name:          "clearing the matching entity clears popped entity",
 			entityToClear: pInfo1,
+			wantPopped:    false,
 		},
 	}
 
@@ -289,13 +290,13 @@ func TestClearPoppedEntity(t *testing.T) {
 				t.Fatalf("pop failed: %v", err)
 			}
 			if !aq.isLastPoppedEntity(popped) {
-				t.Fatalf("expected popped entity to be last popped entity")
+				t.Fatalf("expected popped entity to be in poppedEntities")
 			}
 
 			aq.clearPoppedEntity(tt.entityToClear)
 
-			if aq.lastPoppedEntityKey != tt.wantLastPoppedEntityKey {
-				t.Fatalf("expected last popped entity: %q, got: %q", tt.wantLastPoppedEntityKey, aq.lastPoppedEntityKey)
+			if got := aq.isLastPoppedEntity(pInfo1); got != tt.wantPopped {
+				t.Fatalf("expected isLastPoppedEntity(pInfo1) = %v, got: %v", tt.wantPopped, got)
 			}
 		})
 	}

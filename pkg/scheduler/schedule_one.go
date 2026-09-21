@@ -874,7 +874,6 @@ func (sched *Scheduler) finishFailureWithRequeue(ctx context.Context, podFwk fra
 
 	pod := podInfo.Pod
 	apiCacher := podFwk.APICacher()
-	isPodGroupMember := sched.genericWorkloadEnabled && pod.Spec.SchedulingGroup != nil
 
 	if apiCacher == nil {
 		sched.requeue(logger, podInfo)
@@ -884,22 +883,18 @@ func (sched *Scheduler) finishFailureWithRequeue(ctx context.Context, podFwk fra
 		return
 	}
 
-	// Pod group members must wait and requeue synchronously because AddAttemptedPodGroupIfNeeded
-	// runs immediately after FailureHandler on the scheduling goroutine and drains pendingPodGroupPods;
-	// requeuing in a background goroutine would race with AddAttemptedPodGroupIfNeeded, leaving
-	// pendingPodGroupPods empty or incomplete. Unlike the path below, this blocks the caller's
-	// goroutine until the patch completes, so it already allows at most one patch in flight and
-	// does not go through statusPatchLimiter.
-	// TODO: implement async gate for pod groups.
-	if isPodGroupMember {
-		dispatchAndWaitForPodStatusPatch(ctx, apiCacher, pod, podCondition, nominatingInfo)
-		sched.requeue(logger, podInfo)
-		return
+	tracker := podGroupFailureTrackerFrom(ctx)
+	if tracker != nil {
+		tracker.async = true
+		tracker.wg.Add(1)
 	}
 
 	// The patch and the requeue that follows it outlive the scheduling cycle.
 	bgCtx := context.WithoutCancel(ctx)
 	go func() {
+		if tracker != nil {
+			defer tracker.wg.Done()
+		}
 		sched.patchPodStatusLimited(bgCtx, apiCacher, pod, podCondition, nominatingInfo)
 		sched.requeue(logger, podInfo)
 	}()

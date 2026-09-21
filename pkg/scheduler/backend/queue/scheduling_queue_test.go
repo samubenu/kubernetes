@@ -971,6 +971,7 @@ func Test_InFlightPods(t *testing.T) {
 				{podCreated: pod3},
 				// pgPod2 is popped, while pgPod1 is discarded.
 				{podPopped: pgPod2},
+				{podGroupAttempted: newQueuedPodGroupInfoForLookup(pgPod2.Namespace, pgName, fwk.PodGroupKeyType)},
 				// pod3 is poped.
 				{podPopped: pod3},
 				{callback: func(t *testing.T, q *PriorityQueue) {

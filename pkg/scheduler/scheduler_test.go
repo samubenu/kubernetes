@@ -704,14 +704,13 @@ func TestIsNomination(t *testing.T) {
 }
 
 // TestFailureHandler_StatusPatchLimiterBypass verifies that callers which must not wait
-// for background failure patches (preemption nominations and synchronous pod-group members)
-// bypass the statusPatchLimiter even when it is fully saturated.
+// for background failure patches (preemption nominations) bypass the statusPatchLimiter
+// even when it is fully saturated.
 func TestFailureHandler_StatusPatchLimiterBypass(t *testing.T) {
 	tests := []struct {
-		name                   string
-		targetPod              *v1.Pod
-		nominatingInfo         *fwk.NominatingInfo
-		genericWorkloadEnabled bool
+		name           string
+		targetPod      *v1.Pod
+		nominatingInfo *fwk.NominatingInfo
 	}{
 		{
 			name:      "preemption nomination bypasses limiter",
@@ -720,13 +719,6 @@ func TestFailureHandler_StatusPatchLimiterBypass(t *testing.T) {
 				NominatingMode:    fwk.ModeOverride,
 				NominatedNodeName: "node-1",
 			},
-		},
-		{
-			name: "pod group member bypasses limiter",
-			targetPod: st.MakePod().Name("member").UID("member").Namespace(v1.NamespaceDefault).
-				PodGroupName("pg").Obj(),
-			nominatingInfo:         clearNominatedNode,
-			genericWorkloadEnabled: true,
 		},
 	}
 
@@ -739,7 +731,6 @@ func TestFailureHandler_StatusPatchLimiterBypass(t *testing.T) {
 			blocker := st.MakePod().Name("blocker").UID("blocker").Namespace(v1.NamespaceDefault).Obj()
 			client := fake.NewClientset(&v1.PodList{Items: []v1.Pod{*blocker, *tt.targetPod}})
 			h := newFailureHandlerHarness(ctx, t, client, true)
-			h.scheduler.genericWorkloadEnabled = tt.genericWorkloadEnabled
 			// A single slot, so anything subject to the limiter is stuck behind the blocker.
 			h.scheduler.statusPatchLimiter = newStatusPatchLimiter(1)
 

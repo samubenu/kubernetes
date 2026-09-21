@@ -22,6 +22,7 @@ import (
 	"iter"
 	"maps"
 	"math/rand"
+	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -135,9 +136,48 @@ func (sched *Scheduler) reconcilePodGroupWithSnapshot(pgi *framework.PodGroupInf
 	return nil
 }
 
+type podGroupFailureTrackerKey struct{}
+
+type podGroupFailureTracker struct {
+	wg    sync.WaitGroup
+	async bool
+}
+
+func withPodGroupFailureTracker(ctx context.Context, tracker *podGroupFailureTracker) context.Context {
+	return context.WithValue(ctx, podGroupFailureTrackerKey{}, tracker)
+}
+
+func podGroupFailureTrackerFrom(ctx context.Context) *podGroupFailureTracker {
+	tracker, _ := ctx.Value(podGroupFailureTrackerKey{}).(*podGroupFailureTracker)
+	return tracker
+}
+
+func (sched *Scheduler) finishPodGroupSchedulingAttempt(ctx context.Context, tracker *podGroupFailureTracker, rootPodGroupInfo *framework.QueuedPodGroupInfo, rootStatus *fwk.Status, updateConditions func(context.Context)) {
+	logger := klog.FromContext(ctx)
+	schedCycle := sched.SchedulingQueue.SchedulingCycle()
+	if !tracker.async {
+		updateConditions(ctx)
+		if err := sched.SchedulingQueue.AddAttemptedPodGroupIfNeeded(logger, rootPodGroupInfo, schedCycle, rootStatus); err != nil {
+			utilruntime.HandleErrorWithContext(ctx, err, "Failed to add attempted pod group to scheduling queue", "podGroupType", rootPodGroupInfo.GetType(), "podGroup", klog.KObj(rootPodGroupInfo))
+		}
+		return
+	}
+
+	bgCtx := context.WithoutCancel(ctx)
+	go func() {
+		updateConditions(bgCtx)
+		tracker.wg.Wait()
+		if err := sched.SchedulingQueue.AddAttemptedPodGroupIfNeeded(logger, rootPodGroupInfo, schedCycle, rootStatus); err != nil {
+			utilruntime.HandleErrorWithContext(bgCtx, err, "Failed to add attempted pod group to scheduling queue", "podGroupType", rootPodGroupInfo.GetType(), "podGroup", klog.KObj(rootPodGroupInfo))
+		}
+	}()
+}
+
 // handlePodGroupFailureBeforeScheduling handles the failure of a (composite) pod group that occurred before scheduling.
 func (sched *Scheduler) handlePodGroupFailureBeforeScheduling(ctx context.Context, podGroupInfo *framework.QueuedPodGroupInfo, err error) {
 	logger := klog.FromContext(ctx)
+	tracker := &podGroupFailureTracker{}
+	ctx = withPodGroupFailureTracker(ctx, tracker)
 	for podInfo := range podGroupInfo.ForEachPodInfo() {
 		podFwk, podFwkErr := sched.frameworkForPod(podInfo.Pod)
 		if podFwkErr != nil {
@@ -149,11 +189,9 @@ func (sched *Scheduler) handlePodGroupFailureBeforeScheduling(ctx context.Contex
 		}
 		sched.FailureHandler(ctx, podFwk, podInfo, fwk.AsStatus(err), clearNominatedNode, time.Now())
 	}
-	sched.updatePodGroupConditionWithError(ctx, podGroupInfo.PodGroupInfo, err)
-	err = sched.SchedulingQueue.AddAttemptedPodGroupIfNeeded(logger, podGroupInfo, sched.SchedulingQueue.SchedulingCycle(), fwk.AsStatus(err))
-	if err != nil {
-		utilruntime.HandleErrorWithContext(ctx, err, "Failed to add pod group back to scheduling queue", "podGroupType", podGroupInfo.GetType(), "podGroup", klog.KObj(podGroupInfo))
-	}
+	sched.finishPodGroupSchedulingAttempt(ctx, tracker, podGroupInfo, fwk.AsStatus(err), func(condCtx context.Context) {
+		sched.updatePodGroupConditionWithError(condCtx, podGroupInfo.PodGroupInfo, err)
+	})
 }
 
 func (sched *Scheduler) updatePodGroupConditionWithError(ctx context.Context, pgi *framework.PodGroupInfo, err error) {
@@ -679,6 +717,13 @@ func applyPodGroupPostFilterResult(completePGResults map[fwk.EntityKey]*podGroup
 // and require the next pod group scheduling cycle to verify the preemption outcome.
 func (sched *Scheduler) submitPodGroupAlgorithmResult(ctx context.Context, schedFwk framework.Framework, podGroupState *framework.CycleState, rootPodGroupInfo *framework.QueuedPodGroupInfo, podGroupResults map[fwk.EntityKey]*podGroupAlgorithmResult, start time.Time, rootStatus *fwk.Status) {
 	logger := klog.FromContext(ctx)
+	tracker := &podGroupFailureTracker{}
+
+	type podGroupConditionUpdate struct {
+		pgi       *framework.PodGroupInfo
+		condition *metav1.Condition
+	}
+	var conditionUpdates []podGroupConditionUpdate
 
 	for _, podGroupResult := range podGroupResults {
 		pgi := podGroupResult.podGroupInfo
@@ -699,17 +744,18 @@ func (sched *Scheduler) submitPodGroupAlgorithmResult(ctx context.Context, sched
 			podResult := podGroupResult.podResults[i]
 			podCtx := podResult.podCtx
 			ctx := klog.NewContext(ctx, podCtx.logger)
+			failureCtx := withPodGroupFailureTracker(ctx, tracker)
 			// To be consistent with pod-by-pod scheduling, construct pod scheduling start time as `now - scheduling duration`.
 			podSchedulingStart := time.Now().Add(-podResult.schedulingDuration)
 
 			if podGroupResult.status.IsError() {
 				if podResult.status.IsError() {
 					// If this exact pod failed with an error, use its status instead.
-					sched.FailureHandler(ctx, schedFwk, pInfo, podResult.status, clearNominatedNode, podSchedulingStart)
+					sched.FailureHandler(failureCtx, schedFwk, pInfo, podResult.status, clearNominatedNode, podSchedulingStart)
 					continue
 				}
 				// Pod group failed with an error. Reject all pods with its status.
-				sched.FailureHandler(ctx, schedFwk, pInfo, podGroupResult.status, clearNominatedNode, podSchedulingStart)
+				sched.FailureHandler(failureCtx, schedFwk, pInfo, podGroupResult.status, clearNominatedNode, podSchedulingStart)
 				continue
 			}
 			if podResult.status.IsSuccess() {
@@ -722,7 +768,7 @@ func (sched *Scheduler) submitPodGroupAlgorithmResult(ctx context.Context, sched
 					assumedPodInfo, status := sched.prepareForBindingCycle(ctx, podCtx.state, schedFwk, pInfo, podCtx.podsToActivate, podResult.scheduleResult)
 					if !status.IsSuccess() {
 						// In such unlikely situation just reject this pod.
-						sched.FailureHandler(ctx, schedFwk, pInfo, status, clearNominatedNode, podSchedulingStart)
+						sched.FailureHandler(failureCtx, schedFwk, pInfo, status, clearNominatedNode, podSchedulingStart)
 						unschedulablePods++
 						continue
 					}
@@ -731,23 +777,23 @@ func (sched *Scheduler) submitPodGroupAlgorithmResult(ctx context.Context, sched
 				case podGroupResult.status.IsRejected():
 					if podGroupResult.waitingOnPreemption {
 						// Pod has to come back to the scheduling queue as unschedulable, waiting for preemption to complete.
-						sched.FailureHandler(ctx, schedFwk, pInfo, podGroupResult.status.Clone(), podResult.scheduleResult.nominatingInfo, podSchedulingStart)
+						sched.FailureHandler(failureCtx, schedFwk, pInfo, podGroupResult.status.Clone(), podResult.scheduleResult.nominatingInfo, podSchedulingStart)
 					} else {
 						// Pod group is unschedulable, so the pod has to be marked as unschedulable.
 						// Its rejection status is set to the pod group's status message.
-						sched.FailureHandler(ctx, schedFwk, pInfo, podGroupResult.status.Clone(), clearNominatedNode, podSchedulingStart)
+						sched.FailureHandler(failureCtx, schedFwk, pInfo, podGroupResult.status.Clone(), clearNominatedNode, podSchedulingStart)
 					}
 					unschedulablePods++
 				default:
 					err := fmt.Errorf("received unexpected pod group scheduling algorithm status code: %s", podGroupResult.status.Code())
-					sched.FailureHandler(ctx, schedFwk, pInfo, fwk.AsStatus(err), clearNominatedNode, podSchedulingStart)
+					sched.FailureHandler(failureCtx, schedFwk, pInfo, fwk.AsStatus(err), clearNominatedNode, podSchedulingStart)
 					unschedulablePods++
 				}
 			} else {
 				// TBD: Add a message to status if the pod used features for which finding a placement cannot be guaranteed,
 				// such as heterogeneous pod group or using inter-pod dependencies.
 				// When a pod is unschedulable or preemption is required, just call the FailureHandler.
-				sched.FailureHandler(ctx, schedFwk, pInfo, podResult.status, podResult.scheduleResult.nominatingInfo, podSchedulingStart)
+				sched.FailureHandler(failureCtx, schedFwk, pInfo, podResult.status, podResult.scheduleResult.nominatingInfo, podSchedulingStart)
 				unschedulablePods++
 			}
 		}
@@ -785,7 +831,10 @@ func (sched *Scheduler) submitPodGroupAlgorithmResult(ctx context.Context, sched
 			}
 			utilruntime.HandleErrorWithContext(ctx, podGroupResult.status.AsError(), "Error scheduling pod group", "podGroup", klog.KObj(pgi), "errorPods", len(queuedPodInfos))
 		}
-		sched.updatePodGroupCondition(ctx, pgi, condition)
+		conditionUpdates = append(conditionUpdates, podGroupConditionUpdate{
+			pgi:       pgi,
+			condition: condition,
+		})
 	}
 
 	rootResult := podGroupResults[rootPodGroupInfo.PodGroupInfo.GetKey()]
@@ -802,9 +851,11 @@ func (sched *Scheduler) submitPodGroupAlgorithmResult(ctx context.Context, sched
 		metrics.PodGroupScheduleError(schedFwk.ProfileName(), metrics.SinceInSeconds(start))
 	}
 
-	if err := sched.SchedulingQueue.AddAttemptedPodGroupIfNeeded(logger, rootPodGroupInfo, sched.SchedulingQueue.SchedulingCycle(), rootStatus); err != nil {
-		utilruntime.HandleErrorWithContext(ctx, err, "Failed to add attempted pod group to scheduling queue", rootPodGroupInfo.Type, klog.KObj(rootPodGroupInfo))
-	}
+	sched.finishPodGroupSchedulingAttempt(ctx, tracker, rootPodGroupInfo, rootStatus, func(updateCtx context.Context) {
+		for _, u := range conditionUpdates {
+			sched.updatePodGroupCondition(updateCtx, u.pgi, u.condition)
+		}
+	})
 }
 
 // updatePodGroupCondition patches the given condition on a PodGroup.
