@@ -5,7 +5,7 @@ metadata:
 spec:
   priority: 1000
   schedulingGroup:
-    podGroupName: podgroup-0
+    podGroupName: podgroup-{{DivideInt .Index .podsPerGroup}}
   affinity:
     podAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

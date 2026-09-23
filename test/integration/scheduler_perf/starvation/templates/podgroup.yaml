@@ -3,6 +3,7 @@ kind: PodGroup
 metadata:
   name: podgroup-{{.Index}}
 spec:
+  priority: 1000
   schedulingPolicy:
     gang:
       minCount: {{.minCount}}

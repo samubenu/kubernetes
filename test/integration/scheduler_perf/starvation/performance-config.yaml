@@ -126,3 +126,144 @@
       initPodGroups: 1
       cloggerPods: 10000
       starvationProne: 500
+- name: StarvationDelayedNodeReady
+  featureGates:
+    SchedulerAsyncAPICalls: true
+  metricsCollectorConfig:
+    metrics:
+      scheduler_queue_incoming_pods_total:
+      - label: event
+        values: [ScheduleAttemptFailure, AssignedPodAdd, BackoffComplete, UnscheduledPodAdd, ForceActivate]
+      - label: queue
+        values: [active, backoff, unschedulable]
+      scheduler_scheduling_attempt_duration_seconds:
+      - label: result
+        values: [scheduled, unschedulable, error]
+      scheduler_pod_scheduling_sli_duration_seconds:
+      - label: attempts
+        values: ["1", "2"]
+  workloadTemplate:
+  - opcode: createNamespaces
+    prefix: starvation
+    count: 2
+  - opcode: createPods
+    countParam: $cloggerPods
+    podTemplatePath: templates/clogger-pod.yaml
+    namespace: starvation-0
+    skipWaitToCompletion: true
+  - opcode: sleep
+    duration: 50ms
+  - opcode: startCollectingMetrics
+    name: victim
+    namespaces: [starvation-1]
+  - opcode: createPods
+    countParam: $starvationProne
+    podTemplatePath: templates/victim-pod.yaml
+    namespace: starvation-1
+    skipWaitToCompletion: true
+  - opcode: sleep
+    duration: 100ms
+  - opcode: createNodes
+    countParam: $initNodes
+    nodeTemplatePath: templates/node.yaml
+  - opcode: barrier
+    stageRequirement: Scheduled
+    namespaces: [starvation-1]
+  - opcode: stopCollectingMetrics
+  workloads:
+  - name: 1000Nodes_1000Cloggers_QPS100
+    schedulerApiClientQPS: 100
+    schedulerApiClientBurst: 100
+    labels: [performance]
+    params:
+      initNodes: 1000
+      cloggerPods: 1000
+      starvationProne: 200
+  - name: 1000Nodes_1000Cloggers_QPS100_AsyncDisabled
+    featureGates:
+      SchedulerAsyncAPICalls: false
+    schedulerApiClientQPS: 100
+    schedulerApiClientBurst: 100
+    labels: [performance]
+    params:
+      initNodes: 1000
+      cloggerPods: 1000
+      starvationProne: 200
+- name: StarvationDelayedNodeReadyPodGroup
+  featureGates:
+    GenericWorkload: true
+    SchedulerAsyncAPICalls: true
+  metricsCollectorConfig:
+    metrics:
+      scheduler_queue_incoming_pods_total:
+      - label: event
+        values: [ScheduleAttemptFailure, AssignedPodAdd, BackoffComplete, UnscheduledPodAdd, ForceActivate]
+      - label: queue
+        values: [active, backoff, unschedulable]
+      scheduler_scheduling_attempt_duration_seconds:
+      - label: result
+        values: [scheduled, unschedulable, error]
+      scheduler_pod_scheduling_sli_duration_seconds:
+      - label: attempts
+        values: ["1", "2"]
+  workloadTemplate:
+  - opcode: createNamespaces
+    prefix: starvation
+    count: 2
+  - opcode: createPodGroups
+    namespace: starvation-0
+    templatePath: templates/podgroup.yaml
+    countParam: $initPodGroups
+    templateParams:
+      minCount: $podsPerGroup
+  - opcode: createPods
+    countParam: $initPodGroups
+    countMultiplierParam: $podsPerGroup
+    podTemplatePath: templates/clogger-podgroup-pod.yaml
+    namespace: starvation-0
+    skipWaitToCompletion: true
+    templateParams:
+      podsPerGroup: $podsPerGroup
+  - opcode: sleep
+    duration: 50ms
+  - opcode: startCollectingMetrics
+    name: victim
+    namespaces: [starvation-1]
+  - opcode: createPods
+    countParam: $starvationProne
+    podTemplatePath: templates/victim-pod.yaml
+    namespace: starvation-1
+    skipWaitToCompletion: true
+  - opcode: sleep
+    duration: 100ms
+  - opcode: createNodes
+    countParam: $initNodes
+    nodeTemplatePath: templates/node.yaml
+  - opcode: barrier
+    stageRequirement: Scheduled
+    namespaces: [starvation-1]
+  - opcode: stopCollectingMetrics
+  workloads:
+  - name: 1000Nodes_20PodGroups50_1000Cloggers_QPS100
+    schedulerApiClientQPS: 100
+    schedulerApiClientBurst: 100
+    labels: [performance]
+    params:
+      initNodes: 1000
+      initPodGroups: 20
+      podsPerGroup: 50
+      starvationProne: 200
+  - name: 1000Nodes_20PodGroups50_1000Cloggers_QPS100_AsyncDisabled
+    featureGates:
+      GenericWorkload: true
+      SchedulerAsyncAPICalls: false
+    schedulerApiClientQPS: 100
+    schedulerApiClientBurst: 100
+    labels: [performance]
+    params:
+      initNodes: 1000
+      initPodGroups: 20
+      podsPerGroup: 50
+      starvationProne: 200
+
+

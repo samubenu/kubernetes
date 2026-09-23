@@ -89,7 +89,7 @@ func newDefaultComponentConfig() (*config.KubeSchedulerConfiguration, error) {
 // remove resources after finished.
 // Notes on rate limiter:
 //   - client rate limit is set to 5000.
-func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfiguration, enabledFeatures map[featuregate.Feature]bool, opts *schedulerPerfOptions) (*scheduler.Scheduler, informers.SharedInformerFactory, <-chan struct{}, ktesting.TContext) {
+func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfiguration, enabledFeatures map[featuregate.Feature]bool, qps *float32, burst *int, opts *schedulerPerfOptions) (*scheduler.Scheduler, informers.SharedInformerFactory, <-chan struct{}, ktesting.TContext) {
 	var runtimeConfig []string
 	if enabledFeatures[features.GenericWorkload] {
 		runtimeConfig = append(runtimeConfig, fmt.Sprintf("%s=true", schedulingapiv1beta1.SchemeGroupVersion))
@@ -119,11 +119,19 @@ func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfig
 		tCtx.Cancel("test is done")
 	})
 
-	// TODO: client connection configuration, such as QPS or Burst is configurable in theory, this could be derived from the `config`, need to
-	// support this when there is any testcase that depends on such configuration.
-	cfg := restclient.CopyConfig(server.ClientConfig)
-	cfg.QPS = 5000.0
-	cfg.Burst = 5000
+	testingFrameworkCfg := restclient.CopyConfig(server.ClientConfig)
+	testingFrameworkCfg.QPS = 5000.0
+	testingFrameworkCfg.Burst = 5000
+	frameworkTCtx := tCtx.WithRESTConfig(testingFrameworkCfg)
+
+	schedulerCfg := restclient.CopyConfig(server.ClientConfig)
+	if qps != nil {
+		schedulerCfg.QPS = *qps
+	}
+	if burst != nil {
+		schedulerCfg.Burst = *burst
+	}
+	schedulerTCtx := tCtx.WithRESTConfig(schedulerCfg)
 
 	// use default component config if config here is nil
 	if config == nil {
@@ -134,25 +142,23 @@ func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfig
 		}
 	}
 
-	tCtx = tCtx.WithRESTConfig(cfg)
-
 	// Not all config options will be effective but only those mostly related with scheduler performance will
 	// be applied to start a scheduler, most of them are defined in `scheduler.schedulerOptions`.
-	scheduler, informerFactory, done := util.StartSchedulerWithDone(tCtx, config, opts.outOfTreePluginRegistry)
-	util.StartFakePVController(tCtx, tCtx.Client(), informerFactory)
-	runGC := util.CreateGCController(tCtx, tCtx, *cfg, informerFactory)
-	runNS := util.CreateNamespaceController(tCtx, tCtx, *cfg, informerFactory)
+	scheduler, informerFactory, done := util.StartSchedulerWithDone(schedulerTCtx, config, opts.outOfTreePluginRegistry)
+	util.StartFakePVController(frameworkTCtx, frameworkTCtx.Client(), informerFactory)
+	runGC := util.CreateGCController(frameworkTCtx, frameworkTCtx, *testingFrameworkCfg, informerFactory)
+	runNS := util.CreateNamespaceController(frameworkTCtx, frameworkTCtx, *testingFrameworkCfg, informerFactory)
 	// Testing of DRA with inline resource claims depends on this
 	// controller for creating and removing ResourceClaims.
-	runResourceClaimController := util.CreateResourceClaimController(tCtx, tCtx, tCtx.Client(), informerFactory)
+	runResourceClaimController := util.CreateResourceClaimController(frameworkTCtx, frameworkTCtx, frameworkTCtx.Client(), informerFactory)
 
-	informerFactory.Start(tCtx.Done())
-	informerFactory.WaitForCacheSync(tCtx.Done())
+	informerFactory.Start(frameworkTCtx.Done())
+	informerFactory.WaitForCacheSync(frameworkTCtx.Done())
 	go runGC()
 	go runNS()
 	go runResourceClaimController()
 
-	return scheduler, informerFactory, done, tCtx
+	return scheduler, informerFactory, done, frameworkTCtx
 }
 
 func isAttempted(pod *v1.Pod) bool {
@@ -838,5 +844,90 @@ func (sdc *schedulingDurationCollector) collect() []DataItem {
 			"Duration": sdc.duration.Seconds(),
 		},
 		Unit: "s",
+	}}
+}
+
+type victimSLICollector struct {
+	podInformer   coreinformers.PodInformer
+	resultLabels  map[string]string
+	labelSelector map[string]string
+	namespaces    sets.Set[string]
+	samples       []float64
+	mu            sync.Mutex
+}
+
+func newVictimSLICollector(podInformer coreinformers.PodInformer, resultLabels map[string]string, labelSelector map[string]string, namespaces []string) *victimSLICollector {
+	return &victimSLICollector{
+		podInformer:   podInformer,
+		resultLabels:  resultLabels,
+		labelSelector: labelSelector,
+		namespaces:    sets.New(namespaces...),
+	}
+}
+
+func (vc *victimSLICollector) init() error { return nil }
+
+func (vc *victimSLICollector) run(tCtx ktesting.TContext) {
+	handle, err := vc.podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj any) {
+			vc.onPodChange(tCtx, nil, obj)
+		},
+		UpdateFunc: func(oldObj, newObj any) {
+			vc.onPodChange(tCtx, oldObj, newObj)
+		},
+	})
+	if err != nil {
+		tCtx.Fatalf("register pod event handler: %v", err)
+	}
+	defer func() {
+		_ = vc.podInformer.Informer().RemoveEventHandler(handle)
+	}()
+	<-tCtx.Done()
+}
+
+func (vc *victimSLICollector) onPodChange(tCtx ktesting.TContext, oldObj, newObj any) {
+	oldPod, newPod, err := schedutil.As[*v1.Pod](oldObj, newObj)
+	if err != nil || newPod == nil {
+		return
+	}
+	if len(vc.namespaces) > 0 && !vc.namespaces.Has(newPod.Namespace) {
+		return
+	}
+	if !labelsMatch(newPod.Labels, vc.labelSelector) {
+		return
+	}
+	if (oldPod == nil || oldPod.Spec.NodeName == "") && newPod.Spec.NodeName != "" {
+		now := time.Now()
+		durationMs := now.Sub(newPod.CreationTimestamp.Time).Seconds() * 1000.0
+		vc.mu.Lock()
+		vc.samples = append(vc.samples, durationMs)
+		vc.mu.Unlock()
+	}
+}
+
+func (vc *victimSLICollector) collect() []DataItem {
+	vc.mu.Lock()
+	defer vc.mu.Unlock()
+	if len(vc.samples) == 0 {
+		return nil
+	}
+	sort.Float64s(vc.samples)
+	sum := 0.0
+	for _, v := range vc.samples {
+		sum += v
+	}
+	n := float64(len(vc.samples))
+	labels := maps.Clone(vc.resultLabels)
+	labels["Metric"] = "victim_pod_scheduling_sli_duration"
+	return []DataItem{{
+		Labels: labels,
+		Data: map[string]float64{
+			"Average": sum / n,
+			"Perc50":  vc.samples[int(math.Ceil(n*0.50))-1],
+			"Perc90":  vc.samples[int(math.Ceil(n*0.90))-1],
+			"Perc95":  vc.samples[int(math.Ceil(n*0.95))-1],
+			"Perc99":  vc.samples[int(math.Ceil(n*0.99))-1],
+		},
+		Unit: "ms",
 	}}
 }
